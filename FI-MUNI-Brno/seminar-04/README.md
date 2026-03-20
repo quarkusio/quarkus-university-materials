@@ -1,0 +1,307 @@
+# Testing Seminar
+
+This seminar will guide you through a few test cases and things related to testing in Quarkus.
+
+As always, Quarkus provides an comprehensive guide for testing that you can use as a reference: https://quarkus.io/guides/getting-started-testing.
+
+# Tasks
+
+## Task 1 - Clone and open the project for this seminar
+
+You should be familiar with the code-base as we will extend test cases for project developed in the previous seminar.
+
+1. Clone the repository into a local directory.
+
+```shell
+$ git clone https://github.com/xstefank/pa165-quarkus.git
+cd pa165-quarkus/seminar-04/quarkus-testing
+```
+
+2. Open the project in IntelliJ IDEA.
+
+3. Build the project in the project root directory
+
+```shell
+$ mvn clean install
+```
+
+## Task 2 - Intro to test annotations
+
+In this section, we will explain basic testing annotations. We will also apply them in the `PersonFacadeTest`
+one by one in order to have also hands-on experience with them.
+
+### [@Test](https://junit.org/junit5/docs/current/api/org.junit.jupiter.api/org/junit/jupiter/api/Test.html)
+It indicates that the annotated method is a test method. These annotated methods can subsequently be processed by other
+tools, such as the [Surefire plugin](https://maven.apache.org/surefire/maven-surefire-plugin/), which executes these methods.
+
+This annotation comes from JUnit 5, which is a testing framework for unit tests, not only Quarkus-specific. It is
+widely used also for testing Java SE programs.
+
+1. Run `PersonFacadeTest`, e.g. by running:
+```shell
+mvn test -Dtest="PersonFacadeTest"
+```
+
+In case you are running the command via Idea, do not use quotation marks, i.e., use the following:
+```shell
+mvn test -Dtest=PersonFacadeTest
+```
+
+What is happening? Fix the problem.
+
+2. Run the test again, but this time, with continuous testing in Dev mode - https://quarkus.io/guides/continuous-testing. You can probably see the benefits of this functionality right away.
+
+### [@Mock](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#9)
+This annotation marks a field as a mock.
+
+Look at the `PersonFacadeTest#setUp`:
+```java
+@BeforeEach
+void setUp() {
+    personService = Mockito.mock(PersonService.class);
+    personMapper = Mockito.mock(PersonMapper.class);
+    personFacade = new PersonFacade(personService, personMapper);
+}
+```
+Can we make this method more readable? Of course, we can! In fact, in the following parts of this task, we will try to
+fully get rid of this method.
+
+3. Mark `personService` and `personMapper` as mocks.
+
+4. Do not forget to delete appropriate LoC from the `setUp` method.
+
+5. Run `PersonFacadeTest` again. Feel free to experiment with continuous testing in Dev mode again.
+
+Hmm, **NPE** (Null Pointer Exception), but why?! Unlike [Mockito#mock](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#mock(java.lang.Class)),
+`@Mock` just marks the field as a mock, it does **NOT** initialize it.
+
+6. Fix the NPE. Use [MockitoAnnotations#openMocks](https://www.javadoc.io/static/org.mockito/mockito-core/5.16.0/org.mockito/org/mockito/MockitoAnnotations.html#openMocks(java.lang.Object)).
+
+### [@ExtendWith](https://junit.org/junit5/docs/5.0.3/api/org/junit/jupiter/api/extension/ExtendWith.html)
+
+Even though the solution from the previous point is correct, the best practice is to use `@ExtendWith(MockitoExtension.class)`,
+which calls `MockitoAnnotations#openMocks` internally. Besides that, it also does another stuff for us, e.g. validates
+the correct usage of the Mockito framework.
+
+7. Use the suggested solution.
+
+   **Checkpoint:** Only the line
+```java
+personFacade = new PersonFacade(personService, personMapper);
+```
+should be present in the `setUp` method.
+
+### [@InjectMocks](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/InjectMocks.html)
+This annotation is used to inject required mocks into the class under test.
+
+8. Use the annotation. Do not forget to remove `PersonFacadeTest#setUp`.
+
+9. Ensure that everything is working as expected by running `PersonFacadeTest` again.
+
+## Task 3 - Test case naming
+
+As you can see, existing unit tests in [PersonServiceTest](quarkus-testing/src/test/java/cz/muni/fi/pa165/socialnetwork/service/PersonServiceTest.java)
+have a different naming as tests you have seen in the previous seminars. The main reason for that is to show you
+that one test case per method is not always enough.
+
+- This section should make you aware that there are many conventions you can use to name your test cases.
+    - These conventions are not strictly tied to any programming language
+      or framework.
+    - It _may_ be personal preference, but keep in mind you want to have the naming unified across whole project.
+- In this seminar we will be using convention `methodName_stateUnderTest_expectedBehavior`, e.g. `isAdult_ageLessThan18_returnsFalse`
+- Important feature of the naming should be the possibility to express:
+    - **which method** is being tested
+        - in `isAdult_ageLessThan18_returnsFalse` the `isAdult` method is being tested;
+    - **what state** we are covering in the test
+        - in `isAdult_ageLessThan18_returnsFalse` the `ageLessThan18` is state;
+    - how the method **should react** (returns/throws/...);
+        - in `isAdult_ageLessThan18_returnsFalse` the `returnsFalse` is how the method **should** react;
+- Read more about the naming and come up with the best approach for your project:
+    - https://www.baeldung.com/java-unit-testing-best-practices#3-test-case-naming-convention
+    - https://medium.com/@stefanovskyi/unit-test-naming-conventions-dd9208eadbea
+
+## Task 4 - Service tests
+In the previous task we were exploring unit tests for service layer.
+Let's implement our own!
+
+In this and following two tasks we prepared diagrams for you in order to help you visualize what is going on in the test. In every test, we are testing (quite obviously) exactly one layer and mock needed dependencies from the layer below.
+
+In this case, we are testing `Service layer` (in particular, `PersonService`) and mock `PersonRepository` (since it's the only dependency `PersonService` needs).
+You will learn how to create repository layer in the lectures about persistence.
+
+
+<img alt="Service test diagram" src="images/service-test.svg" alt="drawing" width="50%"/>
+
+1. Check out [service implementation](quarkus-testing/src/main/java/cz/muni/fi/pa165/socialnetwork/service/PersonService.java);
+2. Implement `findByEmail(String email)`;
+    1. Use repository method `findByEmail` implemented in
+       [Person Repository](quarkus-testing/src/main/java/cz/muni/fi/pa165/socialnetwork/data/repository/PersonRepository.java);
+3. Write test for the new method in [PersonServiceTest](quarkus-testing/src/test/java/cz/muni/fi/pa165/socialnetwork/service/PersonServiceTest.java);
+    1. Name of the test could be `findByEmail_personFound_returnsPerson` which should give you a lead what to test;
+    2. Run the test;
+        1. Test it through IDE (look for a green button next to the test definition);
+        2. Or use maven;
+    ```shell
+     mvn test -Dtest="PersonServiceTest#findByEmail_personFound_returnsPerson"
+    ```
+
+4. Take a look at `updateEmail` implementation;
+5. Write test with following signature `updateEmail_personFoundAndEmailIsValid_setEmailCalled`;
+    1. Now, it should be straightforward to write **Act** and **Arrange**;
+ 
+    2. For **Assert** phase use `Mockito.verify()` and `Mockito.times()`
+       (take an inspiration for both methods [here](https://www.baeldung.com/mockito-verify#cookbook));
+
+       **Note:** [Mockito#verify](https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#verify(java.lang.Object,org.mockito.verification.VerificationMode))
+       has the default `times(1)`. Hence, it can be potentially omitted.
+
+## Task 5 - Facade tests
+Let's write quick tests for facade layer. Take an inspiration from existing tests.
+
+<img alt="Facade test diagram" src="images/facade-test.svg" width="50%">
+
+**Note:** You always have to mock all dependencies of object you want to test. Facade has two dependencies - service layer and mapper.
+You do not see the mapper in the picture above because it is not an architectural layer, it is just dependency of the class under test.
+
+1. Implement `findByEmail` in facade layer;
+2. Write the test for it.
+3. Run it!
+4. Write test for happy path scenario for `updateEmail` method;
+    1. What do you think? What name would be appropriate for such test?
+    2. Think about different scenarios (take a look at `updateEmail` implementation in service layer);
+
+Hint: `Mockito.doNothing()` could be of use.
+
+## Task 6 - REST resource tests
+Now we will proceed with the same approach as for facade and REST unit tests.
+
+<img alt="REST Resource test diagram" src="images/resource-test.svg" width="50%">
+
+1. Add new file for REST resource unit tests; Create a new `PersonResourceTest` in the `rest` package; (don't use the one provided for you in the `socialnetwork` package for now).
+2. Mock all dependencies;
+3. Implement `findByEmail()` in REST resource;
+4. Write test `findByEmail_personFound_returnsPerson`
+    1. Keep the structure: Arrange, Act, Assert
+    2. Check that:
+        1. The response ended up with status code `200`;
+        2. The response body is not null;
+        3. Found person email is the same as requested;
+5. Write `updateEmail_validRequestBody_callsUpdateOnFacade` test;
+    1. Check that method returns expected status code.
+
+## (Optional) Task 7 - Repository tests
+**Note:** You will go through the repository pattern in future weeks. This section should give you a brief introduction
+on how to test custom methods in the repository.
+
+As we should be aware, the repository layer is the bottom layer. Therefore, it cannot inject any other services from the
+layers below it. Among other things, this implies that the test for the repository layer cannot be written like the
+tests above, as there is nothing that we could mock. However, this shouldn't pose a problem for us: we will simply call
+the method from the injected repository we want to test and then make the assertions we need to check.
+
+1. Look at the `PersonRepositoryTest`.
+
+There are two things worth mentioning:
+
+- New annotation [@QuarkusTest](https://javadoc.io/static/io.quarkus/quarkus-junit5/0.13.2/io/quarkus/test/junit/QuarkusTest.html) 
+
+Discard this for now, we will explain it in a later task.
+
+- [@TestTransaction](https://quarkus.io/guides/getting-started-testing#tests-and-transactions)
+
+You can use this annotation to wrap your test method in a transaction. The transaction is automatically rolled back at the end of the test method, so you don't have to worry about cleaning up the database after your tests.
+
+Please call the `initData()` method in the beginning of your test in order to have some data in the database. This is a limitation of the current test setup and will be fixed in future Quarkus versions.
+
+2. Write the test for `findByEmail`. Simulate the situation when the person with the requested email is present.
+
+3. Write the test for `findByEmail`. Simulate the situation when the person with the requested email is **NOT** present.
+
+## Task 8 - Testing exceptions
+Get back to the start. Find the implementation of `updateEmail` in the [service implementation](quarkus-testing/src/main/java/cz/muni/fi/pa165/socialnetwork/service/PersonService.java).
+Check the implementation and look at what kind of two custom exceptions can this method throw.
+1. Write test `updateEmail_emailIsInvalid_throwsEmailValidationFailedException`
+    1. Check that lower layer would not be called;
+    2. Do not forget to check also the exception message.
+2. Write test `updateEmail_personNotFound_throwsResourceNotFoundException`
+    1. Check that lower layer was called;
+    2. Do not forget to check also the exception message.
+
+**Hint:** Use `assertThrows` from JUnit5, documentation [here](https://junit.org/junit5/docs/5.9.1/api/org.junit.jupiter.api/org/junit/jupiter/api/Assertions.html#assertThrows(java.lang.Class,org.junit.jupiter.api.function.Executable)).
+
+## Task 9 - QuarkusTest and RestAssured
+Let's write another unit test for rest resource. Unlike in task 6, we won't invoke requests programmatically, e.g. `personResource.findById(id)`, but directly using HTTP invocations, e.g. `GET /persons/{id}` (hence, also checking whether endpoint 
+handlers really handle what we suppose to handle).
+
+1. Look at the `PersonResourceMocksTest`.
+
+You should spot the following new annotations:
+
+- [@QuarkusTest](https://javadoc.io/static/io.quarkus/quarkus-junit5/0.13.2/io/quarkus/test/junit/QuarkusTest.html)
+
+This annotation boots up the whole Quarkus application. So, it is possible to call the endpoints via HTTP requests. It also starts Dev Services (if needed), e.g. starts up the in-memory (H2) or external (PostgreSQL) database.
+
+QuarkusTest is also a CDI bean that is actually included in the started application. Therefore, it is possible to inject other beans into the test class. So as you can see, everything runs in a single JVM.
+
+- [@InjectMock](https://quarkus.io/guides/getting-started-testing#further-simplification-with-injectmock)
+
+This annotation does **not** come from the Mockito framework, unlike `@Mock`, but it is Quarkus-specific annotation. You need to add the following dependency to the `pom.xml` in order to use it:
+```xml
+<dependency>
+    <groupId>io.quarkus</groupId>
+    <artifactId>quarkus-junit-mockito</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+It basically provides an automated mock for any CDI injection. Anywhere in the application, where the bean is injected, the mock will be injected instead. This is very useful for testing.
+
+You will also spot that the test uses [RestAssured](https://rest-assured.io/), which is a Java DSL for making HTTP requests and verifying responses. It is widely used for testing REST APIs in Java applications particularly using JSONs. Quarkus has built-in support for RestAssured, so you have for instance automatically configured method `given()` available that points to the started Quarkus application. RestAssured provides a very intuitive fluent API, but feel free to check its documentation in case you want to learn more about it.
+
+2. (**OPTIONAL**) Write the test for `findByEmail`. Simulate the situation when the person with the requested email is present.
+
+3. Write the test for `findByEmail`. Simulate the situation when the person with the requested email is **NOT** present.
+
+**Hint:** `.body("details", containsString("cz.muni.fi.pa165.socialnetwork.exceptions.ResourceNotFoundException"));`. Also `.log().all()` is useful for debugging.
+
+## Task 10 - Integration tests
+
+Very often it is useful to test the application as a black box. Meaning that the test runs separately from the application under the test. This is what Quarkus's `@QuarkusIntegrationTest` does. Quarkus integration test runs in a separate process from the Quarkus application. This happens in three cases:
+
+- When you build a JAR: Quarkus application runs as `java -jar` and the integration test runs in a separate JVM process.
+- When you build a native executable: Quarkus application runs as a native executable and the integration test runs in a separate JVM process.
+- When you build a Docker/Podman image: Quarkus application runs in a container and the integration test runs in a separate JVM process. (we will do this later in the course)
+
+1. Look at the `PersonResourceIT` and `PersonResourceTest`.
+
+As you can see, in Quarkus, as long as your unit test `@QuarkusTest` doesn't use any injections, mocked beans, or access the internals of the application in any way, you can easily add an integration test by just extending the unit test and annotating it with `@QuarkusIntegrationTest`. This will run all the tests from `@QuarkusTest` but in a separate JVM process as described above. Of course, you can also add new tests to the integration test class.
+
+For our use case, we don't need to add any new tests, as we want to run all the tests from `PersonResourceTest` as integration tests.
+
+**Note:** One of the preferred ways to call the integration tests is to suffix them with 'IT', what's exactly the case here.
+
+Our IT of the Person resource is called _PersonResource**IT**_. Since it is named this way, surefire plugin
+does not execute tests in such test class (which is completely fine, since surefire should be used to execute only unit tests). In order to execute tests in this test class, we use [failsafe plugin](https://maven.apache.org/surefire/maven-failsafe-plugin/),
+which is used for executing integration tests. Unlike surefire, failsafe automatically executes test classes suffixed with 'IT'. Also note, that because of this same reason, IT tests don't run with continuous testing in Dev mode.
+
+## Task 11 - Run all the tests
+
+Run all the tests, e.g. by running:
+```shell
+mvn clean verify
+```
+
+Note `<skipITs>false</skipITs>` in the failsafe plugin configuration in `pom.xml`. Quarkus by default skips integration tests.
+
+Double check all the tests were run and are passing. In case you are getting an error now, but didn't get any error when running the tests separately, chances are you were doing some unwanted side effects, e.g. test for updating the email really updated the email and didn't use the mock (which should do nothing in that case).
+
+2. Package application also as a native executable and run all the tests again.
+
+```shell
+mvn clean verify -Dnative -Dquarkus.native.container-build=true
+```
+
+`-Dquarkus.native.container-build=true` is needed in case you don't have GraalVM installed locally.
+
+You will see the that the tests are run again as integration tests against the native executable.
+
+3. (**OPTIONAL**) Try to write one last test that will run as an integration test. Meaning you will test the data generated in the application. (e.g., call `GET /persons/1` and check the returned data).
